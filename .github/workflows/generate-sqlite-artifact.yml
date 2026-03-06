@@ -80,26 +80,48 @@ jobs:
           config_dir = os.path.join(os.path.expanduser("~"), ".variantvalidator")
           # Parent (~) always exists; config_dir is a file, not a directory — no makedirs needed.
 
-          # Use the repo's default.ini as a base so all sections exist
-          repo_root = os.path.dirname(os.path.abspath("configuration/default.ini"))
-          default_ini = os.path.join(repo_root, "configuration", "default.ini")
+          # Build the config from scratch with all sections required by VV modules.
+          # (logger.py, configure.py, and others all read CONFIG_DIR at module level.)
           config = configparser.ConfigParser()
-          config.read(default_ini)
 
-          # Add/override sections — default.ini on master may not have [backend] yet
-          for section in ("backend", "seqrepo", "mysql", "postgres"):
-              if not config.has_section(section):
-                  config.add_section(section)
+          # [backend] — sqlite backend config (feature branch + workflow only)
+          config.add_section("backend")
           config["backend"]["type"] = "sqlite"
           config["backend"]["cdot_path"] = os.path.abspath(cdot_file)
           config["backend"]["sqlite_path"] = db_path
-          # Use a non-placeholder seqrepo path to pass configure.py validation
+
+          # [seqrepo] — non-placeholder path to pass configure.py validation
+          config.add_section("seqrepo")
+          config["seqrepo"]["version"] = "master"
           config["seqrepo"]["location"] = "/tmp/seqrepo_placeholder"
-          # Set dummy mysql/postgres values to avoid KeyErrors in configure.py
+          config["seqrepo"]["require_threading"] = "False"
+
+          # [mysql] / [postgres] — dummy values to avoid KeyErrors in configure.py
+          config.add_section("mysql")
+          config["mysql"]["host"] = "127.0.0.1"
+          config["mysql"]["port"] = "3306"
+          config["mysql"]["database"] = "validator"
           config["mysql"]["user"] = "dummy"
           config["mysql"]["password"] = "dummy"
+          config["mysql"]["version"] = "dummy"
+          config.add_section("postgres")
+          config["postgres"]["host"] = "127.0.0.1"
+          config["postgres"]["database"] = "vvta"
+          config["postgres"]["port"] = "5432"
+          config["postgres"]["version"] = "dummy"
           config["postgres"]["user"] = "dummy"
           config["postgres"]["password"] = "dummy"
+
+          # [logging] — required by logger.py at module level; disable file logging
+          config.add_section("logging")
+          config["logging"]["log"] = "False"
+          config["logging"]["console"] = "WARNING"
+          config["logging"]["file"] = "WARNING"
+
+          # [Entrez] — required by some VV modules
+          config.add_section("Entrez")
+          config["Entrez"]["email"] = "ci@variantvalidator.org"
+          config["Entrez"]["api_key"] = ""
 
           with open(config_dir, "w") as f:
               config.write(f)
