@@ -44,13 +44,13 @@ jobs:
           fi
           echo "CDOT_TAG=${RELEASE_TAG}" >> "$GITHUB_OUTPUT"
 
-          # Download the RefSeq JSON asset from the release
+          # Download the GRCh38 RefSeq JSON asset (naming: cdot-X.Y.Z.refseq.GRCh38.json.gz)
           gh release download "${RELEASE_TAG}" \
             --repo SACGF/cdot \
-            --pattern 'cdot-*.refseq.json.gz' \
+            --pattern 'cdot-*.refseq.GRCh38.json.gz' \
             --dir .
 
-          CDOT_FILE=$(ls cdot-*.refseq.json.gz | head -1)
+          CDOT_FILE=$(ls cdot-*.refseq.GRCh38.json.gz | head -1)
           echo "CDOT_FILE=${CDOT_FILE}" >> "$GITHUB_OUTPUT"
           echo "Downloaded: ${CDOT_FILE}"
 
@@ -67,13 +67,22 @@ jobs:
           logger = logging.getLogger(__name__)
 
           cdot_file = os.environ["CDOT_FILE"]
-          db_path = "vvdb-seed.sqlite"
+          db_path = os.path.abspath("vvdb-seed.sqlite")
 
-          # Configure VariantValidator to use sqlite backend
-          from VariantValidator.settings import CONFIG
-          CONFIG["sqlite"]["db_path"] = db_path
-          CONFIG["cdot"]["transcript_source"] = cdot_file
-          CONFIG["backend"]["type"] = "sqlite"
+          # Write a VariantValidator config pointing at the sqlite backend
+          import configparser
+          from VariantValidator.settings import CONFIG_DIR
+          config = configparser.ConfigParser()
+          config.read(CONFIG_DIR)
+          if "backend" not in config:
+              config["backend"] = {}
+          config["backend"]["type"] = "sqlite"
+          config["backend"]["cdot_path"] = os.path.abspath(cdot_file)
+          config["backend"]["sqlite_path"] = db_path
+          os.makedirs(os.path.dirname(os.path.abspath(CONFIG_DIR)), exist_ok=True)
+          with open(CONFIG_DIR, "w") as f:
+              config.write(f)
+          logger.info(f"Config written to {CONFIG_DIR}")
 
           import VariantValidator
           validator = VariantValidator.Validator()
