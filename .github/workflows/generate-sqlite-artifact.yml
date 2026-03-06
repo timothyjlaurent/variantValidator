@@ -75,8 +75,10 @@ jobs:
           # configure.py calls read_configuration() at module level, so it runs on
           # first import. We must have a valid config in place before that happens.
           # The VV home dir is always ~/.variantvalidator/VariantValidator.ini
-          config_dir = os.path.join(os.path.expanduser("~"), ".variantvalidator", "VariantValidator.ini")
-          os.makedirs(os.path.dirname(config_dir), exist_ok=True)
+          # configure.py reads CONFIG_DIR = ~/.variantvalidator (a plain file path on master)
+          # configparser.read() silently ignores directories, so we must write to that exact path.
+          config_dir = os.path.join(os.path.expanduser("~"), ".variantvalidator")
+          # Parent (~) always exists; config_dir is a file, not a directory — no makedirs needed.
 
           # Use the repo's default.ini as a base so all sections exist
           repo_root = os.path.dirname(os.path.abspath("configuration/default.ini"))
