@@ -127,9 +127,69 @@ jobs:
               config.write(f)
           logger.info(f"Config written to {config_dir} (backend: sqlite)")
 
-          # Now safe to import VariantValidator — configure.py will read our config
-          from VariantValidator.modules.vvDatabase import SQLiteDatabase
-          db = SQLiteDatabase(db_path)
+          # Initialise the SQLite schema using stdlib sqlite3.
+          # SQLiteDatabase (feature branch) uses this same schema; inlining it here
+          # allows the workflow to run on master (before merge) and after merge alike.
+          import sqlite3
+
+          _SCHEMA_SQL = """
+          CREATE TABLE IF NOT EXISTS transcript_info (
+              refSeqID        TEXT PRIMARY KEY,
+              description     TEXT,
+              transcriptVariant TEXT,
+              currentVersion  TEXT,
+              hgncSymbol      TEXT,
+              utaSymbol       TEXT,
+              updated         TEXT
+          );
+          CREATE TABLE IF NOT EXISTS refSeqGene_loci (
+              refSeqGeneID        TEXT,
+              refSeqChromosomeID  TEXT,
+              genomeBuild         TEXT,
+              startPos            INTEGER,
+              endPos              INTEGER,
+              orientation         TEXT,
+              totalLength         INTEGER,
+              chrPos              TEXT,
+              rsgPos              TEXT,
+              entrezID            INTEGER,
+              hgncSymbol          TEXT,
+              updated             TEXT,
+              PRIMARY KEY (refSeqGeneID, genomeBuild)
+          );
+          CREATE TABLE IF NOT EXISTS LRG_RSG_lookup (
+              lrgID           TEXT PRIMARY KEY,
+              hgncSymbol      TEXT,
+              RefSeqGeneID    TEXT,
+              status          TEXT
+          );
+          CREATE TABLE IF NOT EXISTS LRG_transcripts (
+              LRGtranscriptID     TEXT PRIMARY KEY,
+              RefSeqTranscriptID  TEXT
+          );
+          CREATE TABLE IF NOT EXISTS LRG_proteins (
+              LRGproteinID    TEXT PRIMARY KEY,
+              RefSeqProteinID TEXT
+          );
+          CREATE TABLE IF NOT EXISTS stableGeneIds (
+              hgnc_id         TEXT PRIMARY KEY,
+              hgnc_symbol     TEXT,
+              entrez_id       TEXT,
+              ensembl_gene_id TEXT,
+              omim_id         TEXT,
+              ucsc_id         TEXT,
+              vega_id         TEXT,
+              ccds_ids        TEXT
+          );
+          CREATE TABLE IF NOT EXISTS version (
+              current_version TEXT
+          );
+          """
+
+          conn = sqlite3.connect(db_path)
+          conn.executescript(_SCHEMA_SQL)
+          conn.commit()
+          conn.close()
           logger.info("SQLite schema initialised")
 
           # Verify the database file was created
