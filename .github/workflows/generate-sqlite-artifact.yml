@@ -66,35 +66,37 @@ jobs:
           logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
           logger = logging.getLogger(__name__)
 
+          import configparser
+
           cdot_file = os.environ["CDOT_FILE"]
           db_path = os.path.abspath("vvdb-seed.sqlite")
 
-          # Write config BEFORE importing VariantValidator to prevent first-run setup
-          # from overwriting our config. CONFIG_DIR = ~/.variantvalidator/VariantValidator.ini
-          import configparser
+          # CRITICAL: write config using ONLY stdlib BEFORE any VariantValidator import.
+          # configure.py calls read_configuration() at module level, so it runs on
+          # first import. We must have a valid config in place before that happens.
+          # The VV home dir is always ~/.variantvalidator/VariantValidator.ini
           config_dir = os.path.join(os.path.expanduser("~"), ".variantvalidator", "VariantValidator.ini")
           os.makedirs(os.path.dirname(config_dir), exist_ok=True)
 
-          # Initialise the SQLite database directly — no seqrepo required.
-          # The schema is created on SQLiteDatabase instantiation. Transcript
-          # metadata is populated lazily on first use (NCBI Entrez API calls).
-          # We can't run full validation in CI without seqrepo, but we ship a
-          # properly initialised, schema-complete database.
-          import VariantValidator.modules.vvDBInit  # triggers first-run config copy if needed
-
-          # Write our config AFTER the first-run copy so we overwrite the defaults
+          # Use the repo's default.ini as a base so all sections exist
+          repo_root = os.path.dirname(os.path.abspath("configuration/default.ini"))
+          default_ini = os.path.join(repo_root, "configuration", "default.ini")
           config = configparser.ConfigParser()
-          config.read(config_dir)
-          if "backend" not in config:
-              config["backend"] = {}
+          config.read(default_ini)
+
+          # Override: use sqlite backend with real paths (not placeholders)
           config["backend"]["type"] = "sqlite"
           config["backend"]["cdot_path"] = os.path.abspath(cdot_file)
           config["backend"]["sqlite_path"] = db_path
+          # Use a non-placeholder seqrepo path to pass configure.py validation
+          config["seqrepo"]["location"] = "/tmp/seqrepo_placeholder"
+          # Keep mysql/postgres as-is from default.ini (mysql branch won't be checked for sqlite)
+
           with open(config_dir, "w") as f:
               config.write(f)
-          logger.info(f"Config written to {config_dir}")
+          logger.info(f"Config written to {config_dir} (backend: sqlite)")
 
-          # Create the database schema
+          # Now safe to import VariantValidator — configure.py will read our config
           from VariantValidator.modules.vvDatabase import SQLiteDatabase
           db = SQLiteDatabase(db_path)
           logger.info("SQLite schema initialised")
