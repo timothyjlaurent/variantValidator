@@ -84,13 +84,20 @@ jobs:
           config = configparser.ConfigParser()
           config.read(default_ini)
 
-          # Override: use sqlite backend with real paths (not placeholders)
+          # Add/override sections — default.ini on master may not have [backend] yet
+          for section in ("backend", "seqrepo", "mysql", "postgres"):
+              if not config.has_section(section):
+                  config.add_section(section)
           config["backend"]["type"] = "sqlite"
           config["backend"]["cdot_path"] = os.path.abspath(cdot_file)
           config["backend"]["sqlite_path"] = db_path
           # Use a non-placeholder seqrepo path to pass configure.py validation
           config["seqrepo"]["location"] = "/tmp/seqrepo_placeholder"
-          # Keep mysql/postgres as-is from default.ini (mysql branch won't be checked for sqlite)
+          # Set dummy mysql/postgres values to avoid KeyErrors in configure.py
+          config["mysql"]["user"] = "dummy"
+          config["mysql"]["password"] = "dummy"
+          config["postgres"]["user"] = "dummy"
+          config["postgres"]["password"] = "dummy"
 
           with open(config_dir, "w") as f:
               config.write(f)
