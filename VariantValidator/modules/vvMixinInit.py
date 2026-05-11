@@ -213,6 +213,49 @@ class Mixin:
 
             self.hdp.get_tx_for_gene = _wrapped_get_tx_for_gene
 
+            # get_tx_for_region() returns a list of dicts in cdot, but VV accesses
+            # each element with integer indices (UTA row order):
+            #   0=tx_ac  1=alt_ac  2=alt_strand  3=alt_aln_method  4=start_i  5=end_i
+            # Wrap each element with the same dual-access shim pattern so the
+            # consumers in vvMixinConverters.relevant_transcripts and liftover work
+            # unchanged on cdot data.
+            class _TxForRegion:
+                _INT_TO_KEY = {
+                    0: 'tx_ac', 1: 'alt_ac', 2: 'alt_strand',
+                    3: 'alt_aln_method', 4: 'start_i', 5: 'end_i',
+                }
+                __slots__ = ('_d',)
+
+                def __init__(self, d):
+                    self._d = d
+
+                def __getitem__(self, key):
+                    if isinstance(key, int):
+                        return self._d.get(self._INT_TO_KEY[key])
+                    return self._d[key]
+
+                def get(self, key, default=None):
+                    return self._d.get(key, default)
+
+                def __contains__(self, key):
+                    return key in self._d
+
+                def __repr__(self):
+                    return 'TxForRegion({!r})'.format(self._d)
+
+            _orig_get_tx_for_region = self.hdp.get_tx_for_region
+
+            def _wrapped_get_tx_for_region(
+                alt_ac, alt_aln_method, start_i, end_i,
+                _orig=_orig_get_tx_for_region,
+            ):
+                results = _orig(alt_ac, alt_aln_method, start_i, end_i)
+                if not results:
+                    return results
+                return [_TxForRegion(r) if isinstance(r, dict) else r for r in results]
+
+            self.hdp.get_tx_for_region = _wrapped_get_tx_for_region
+
             # get_gene_info() returns a dict in cdot, but VV accesses the result with
             # integer indices.  UTA gene table column order:
             # 0=hgnc_id, 1=hgnc, 2=maploc, 3=descr, 4=summary, 5=aliases, 6=added.
